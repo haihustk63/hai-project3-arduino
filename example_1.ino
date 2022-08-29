@@ -29,7 +29,7 @@ unsigned long previousMillis = 0;
 
 int realValue = 0;
 int value = 0;
-char buffer[256];
+char jsonBuffer[256];
 int minThreshold = 0;
 int desireThreshold = 100;
 
@@ -37,13 +37,15 @@ void callback(char* topic, byte* payload, unsigned int leng) {
   StaticJsonDocument<256> doc;
   deserializeJson(doc, payload);
   int port = doc["port"];
-  int value = doc["value"];
-
-  if (strcmp(topic, TOPIC_SUB)) {
+  
+  if (strcmp(topic, TOPIC_SUB) == 0) {
+    int value = doc["value"];
     digitalWrite(port, value);
   } else {
-    minThreshold = value["minThreshold"];
-    desireThreshold = value["desireThreshold"];
+    int newMinThreshold = doc["value"]["minThreshold"];
+    int newDesireThreshold = doc["value"]["desireThreshold"];
+    minThreshold = newMinThreshold;
+    desireThreshold = newDesireThreshold;
 
     Serial.println(minThreshold);
     Serial.println(desireThreshold);
@@ -97,19 +99,16 @@ void loop() {
     //    value = real_value / LOOP_COUNT;
     //    int percent = map(value, 0, 1023, 100, 0);
 
-    StaticJsonDocument<2> doc;
+    StaticJsonDocument<256> doc;
 
     //    doc["percent"] = analogRead(A0);
     //    doc["digitalValue"] = digitalRead(PIN_2);
+    
 
+    //dump data
     doc["percent"] = 33;
-    doc["digitalValue"] = 1;
-
-    serializeJson(doc, buffer);
-
-    Serial.println(buffer);
-
-    client.publish(TOPIC_PUB, buffer);
+    serializeJson(doc, jsonBuffer);
+    client.publish(TOPIC_PUB, jsonBuffer);
 
     previousMillis = currentMillis;
   }
