@@ -2,10 +2,12 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-#define PIN_4 4         //D2 RED LIGHT
-#define PIN_5 5         //D1 BLUE LIGHT
+#define PIN_4 4         //D2 RED LIGHT 101
+#define PIN_5 5         //D1 BLUE LIGHT 201
+#define PIN_12 12       //D6 RED LIGHT 202
+#define PIN_13 13       //D7 RED LIGHT 202
 #define PIN_2 2         //D4 MOISTURE SENSOR
-#define PIN_13 13       //D7 WATER PUMP
+#define PIN_14 14       //D5 WATER PUMP
 
 const char* WIFI_NAME = "Hai Ha";
 const char* WIFI_PASS = "063053726";
@@ -32,12 +34,13 @@ int value = 0;
 char jsonBuffer[256];
 int minThreshold = 0;
 int desireThreshold = 100;
+bool sendPumpData = false;
 
 void callback(char* topic, byte* payload, unsigned int leng) {
   StaticJsonDocument<256> doc;
   deserializeJson(doc, payload);
   int port = doc["port"];
-  
+
   if (strcmp(topic, TOPIC_SUB) == 0) {
     int value = doc["value"];
     digitalWrite(port, value);
@@ -46,9 +49,6 @@ void callback(char* topic, byte* payload, unsigned int leng) {
     int newDesireThreshold = doc["value"]["desireThreshold"];
     minThreshold = newMinThreshold;
     desireThreshold = newDesireThreshold;
-
-    Serial.println(minThreshold);
-    Serial.println(desireThreshold);
   }
 }
 
@@ -56,8 +56,12 @@ void setup() {
   // put your setup code here, to run once:
   pinMode(PIN_4, OUTPUT);
   pinMode(PIN_5, OUTPUT);
-  pinMode(PIN_2, INPUT_PULLUP);
+  pinMode(PIN_12, OUTPUT);
   pinMode(PIN_13, OUTPUT);
+  pinMode(PIN_2, INPUT_PULLUP);
+
+  digitalWrite(PIN_14, HIGH);
+  pinMode(PIN_14, OUTPUT);
   Serial.begin(115200);
 
   WiFi.begin(WIFI_NAME, WIFI_PASS);
@@ -86,27 +90,38 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   client.loop();
 
   unsigned long currentMillis = millis();
+  realValue = 0;
 
   if (currentMillis - previousMillis >= INTERVAL) {
-    //    for (int i = 0; i < LOOP_COUNT; i ++) {
-    //      real_value += analogRead(A0);
-    //    }
+    for (int i = 0; i < LOOP_COUNT; i ++) {
+      realValue += analogRead(A0);
+    }
 
-    //    value = real_value / LOOP_COUNT;
-    //    int percent = map(value, 0, 1023, 100, 0);
+    value = realValue / LOOP_COUNT;
+    int percent = map(value, 0, 1023, 100, 0);
 
     StaticJsonDocument<256> doc;
-
-    //    doc["percent"] = analogRead(A0);
-    //    doc["digitalValue"] = digitalRead(PIN_2);
     
+    doc["percent"] = percent;
+    doc["sensorId"] = "630c7f1d6ae147067e678c42";
 
-    //dump data
-    doc["percent"] = 33;
+    if (percent < minThreshold) {
+      digitalWrite(PIN_14, 1);
+      if (!sendPumpData) {
+        doc["pumpId"] = "630c7fdcec1f18d4de014de2";
+        doc["pumpValue"] = 1;
+      }
+      sendPumpData = true;
+    } else {
+      if (sendPumpData) {
+        doc["pumpId"] = "630c7fdcec1f18d4de014de2";
+        doc["pumpValue"] = 0;
+      }
+      sendPumpData = false;
+    }
     serializeJson(doc, jsonBuffer);
     client.publish(TOPIC_PUB, jsonBuffer);
 
